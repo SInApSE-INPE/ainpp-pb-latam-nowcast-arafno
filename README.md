@@ -1,74 +1,78 @@
-# ARAFNO — inferência operacional GSMaP NOW
+# ARAFNO — operational GSMaP NOW inference
 
-Pipeline independente para aquisição, montagem do ARAFNO, carregamento estrito dos
-pesos, processamento e previsão autorregressiva em GeoTIFF. Usa **GSMaP NOW**, conforme
-a escolha operacional, seis observações horárias consecutivas e, por padrão, seis
-horas de previsão. Não precisa de observações futuras, Zarr, Cartopy ou matplotlib.
+This independent pipeline acquires GSMaP inputs, reconstructs the ARAFNO model,
+loads weights strictly, preprocesses observations, and publishes autoregressive
+forecasts as GeoTIFFs. It uses six consecutive hourly **GSMaP NOW** inputs and
+publishes six hourly leads by default. It does not require future observations,
+Zarr, Cartopy, or matplotlib.
 
-Aquisição, processamento, exportação e agendamento estão em
-`src/arafno/_runtime/`, incluído no próprio pacote. A pasta funciona sem as
-demais pastas de modelos e sem `../shared/nowcasting_runtime`. Após atualizar
-uma instalação existente, execute `uv sync --locked`.
+Acquisition, processing, export, and scheduling are packaged in
+`src/arafno/_runtime/`. This project runs without the other model directories
+or `../shared/nowcasting_runtime`. After updating an existing installation,
+run `uv sync --locked`.
 
-## Organização
+## Project layout
 
 ```text
 01_ARAFNO/
-├── pyproject.toml / uv.lock     # pacote instalável e dependências reproduzíveis
-├── config/latam.json           # domínio, produto, orientação, faltantes e artefatos
+├── pyproject.toml / uv.lock     # installable package and reproducible dependencies
+├── config/latam.json           # domain, product, orientation, missing data, artifacts
 ├── src/arafno/
-│   ├── model.py                # arquitetura, carregamento e rollout autorregressivo
-│   ├── _runtime/               # aquisição, processamento, GeoTIFF e agendamento privados
-│   ├── acquisition.py          # arquivos locais, FTP, cache e seleção temporal
-│   ├── processing.py           # leitura binária, recorte e normalização
-│   ├── export.py               # escrita dos GeoTIFFs
-│   ├── artifacts.py            # integridade do pacote de pesos
-│   ├── config.py               # contrato de configuração
-│   ├── formats.py              # constantes únicas do formato GSMaP e saída
-│   ├── scheduler.py            # consulta agendada, lock e deduplicação de emissões
-│   └── entrypoint.py           # CLI e orquestração
-├── artifacts/v1/               # pesos, média, desvio e manifesto SHA-256
-├── reference/                  # três scripts originais preservados
-├── tests/                      # contratos temporais, espaciais e integração
-├── deploy/                     # timer systemd, gerador e instruções de instalação
-├── data/raw/                   # entradas locais opcionais, não apagadas pelo pipeline
-└── outputs/                    # previsões geradas, fora do controle de versão
+│   ├── model.py                # architecture, weight loading, autoregressive rollout
+│   ├── _runtime/               # private acquisition, processing, GeoTIFF, scheduler
+│   ├── acquisition.py          # local files, FTP, cache, time-window selection
+│   ├── processing.py           # binary reading, cropping, normalization
+│   ├── export.py               # GeoTIFF writer
+│   ├── artifacts.py            # model bundle integrity
+│   ├── config.py               # configuration contract
+│   ├── formats.py              # GSMaP format and output constants
+│   ├── scheduler.py            # scheduled polling, locking, deduplication
+│   └── entrypoint.py           # CLI orchestration
+├── artifacts/v1/               # weights, mean, std, SHA-256 manifest
+├── reference/                  # supplied reference scripts; text translated
+├── tests/                      # temporal, spatial, and integration checks
+├── deploy/                     # systemd timer, generator, installation guide
+├── data/raw/                   # optional local inputs; never deleted by pipeline
+└── outputs/                    # generated forecasts, excluded from Git
 ```
 
-## Instalação e execução
+## Configuration and installation
 
-Cada parâmetro tem uma única fonte no código operacional:
+Each operational parameter has one source of truth:
 
-| Parâmetros | Fonte |
+| Parameters | Source |
 |---|---|
-| Limites do domínio, produto, diretório remoto, orientação, artefatos e política de faltantes | `config/latam.json`; campos obrigatórios, sem padrões duplicados em Python |
-| Resolução nativa, extensão e formato binário global, CRS e unidade | `src/arafno/formats.py`; dimensões e tamanho em bytes são derivados |
-| Canais de entrada, embedding, profundidade e patch | Checkpoint; o construtor não define padrões alternativos |
-| Fonte local/FTP, pastas, horizonte, dispositivo e threads | Argumentos da CLI; padrões definidos somente no parser |
-| Credenciais | Variáveis de ambiente |
-| Timeout e retentativas FTP | Seção `ftp` de `config/latam.json` |
-| Frequência de consulta agendada | `OnCalendar` em `deploy/arafno-now.timer` |
+| Domain bounds, product, remote directory, orientation, artifacts, missing-data policy | Required fields in `config/latam.json` |
+| Native resolution, global binary shape, CRS, units | `src/arafno/formats.py`; dimensions and byte size are derived |
+| Input channels, embedding, depth, patch size | Checkpoint tensors; no alternative constructor defaults |
+| Input source, directories, horizon, device, threads | CLI arguments and parser defaults |
+| Credentials | Environment variables |
+| FTP timeout and retry policy | `ftp` section of `config/latam.json` |
+| Poll frequency | `OnCalendar` in `deploy/arafno-now.timer` |
 
-A resolução de 0,1° é parte do contrato do binário GSMaP, não uma opção de
-reamostragem. Por isso, `resolution` foi removido do JSON; cópias antigas da
-configuração devem remover esse campo. A resolução efetiva é registrada no
-manifesto de cada execução. Os valores de arquitetura no manifesto de artefatos
-são descritivos: a montagem lê os pesos. Os scripts em `reference/` são originais
-preservados e não são importados pelo pipeline.
+The 0.1° resolution is part of the GSMaP binary contract, not a resampling
+option. Older JSON configurations must remove `resolution`. The effective
+resolution is recorded in each run manifest. Architecture values in the
+artifact manifest are descriptive; reconstruction reads the checkpoint.
+Scripts under `reference/` are retained for auditing and are not imported
+by the operational pipeline. Their comments and display text were translated
+to English; model calculations were not changed.
 
-Python 3.11 ou superior. Execute a partir desta pasta:
+Use Python 3.11 or newer. From this directory:
 
 ```bash
 uv sync --locked --group dev
 uv run --locked arafno --help
 ```
 
-O lock usa PyTorch CPU para uma instalação portátil. Em um ambiente CUDA, instale a
-distribuição de PyTorch compatível com o driver e depois `pip install .`; o pacote
-aceita o PyTorch já instalado. Execute `arafno --device cuda ...` nesse ambiente.
-Não use `uv sync` com o lock CPU sobre esse ambiente CUDA.
+The lock targets CPU PyTorch for a portable installation. For CUDA, install a
+PyTorch build compatible with the driver and then `pip install .` in that
+environment. Run `arafno --device cuda ...` there. Do not synchronize the
+CPU lock over a CUDA installation.
 
-Leitura local dos binários globais originais, ainda em mm/h:
+## Acquire inputs and run inference
+
+For original global GSMaP binaries stored locally, in mm/h:
 
 ```bash
 uv run --locked arafno --config config/latam.json \
@@ -76,98 +80,100 @@ uv run --locked arafno --config config/latam.json \
   --run-time 2026-10-19T12:00:00Z --steps 6 --device cpu
 ```
 
-Nesse exemplo são necessários os arquivos `gsmap_now.20261019.0700.dat.gz` até
-`gsmap_now.20261019.1200.dat.gz`. Sem `--run-time`, usa a observação mais recente
-e exige a janela completa que termina nela. Não recua silenciosamente para uma
-janela antiga se houver lacunas. O diretório local é pesquisado recursivamente;
-duplicatas de horário são recusadas.
+That example requires `gsmap_now.20261019.0700.dat.gz` through
+`gsmap_now.20261019.1200.dat.gz`. Without `--run-time`, the latest
+observation is used only if its entire input window is present. Missing hours
+do not silently shift the run backward. Local directories are searched
+recursively; duplicate hours are rejected.
 
-Também aceita a nomenclatura NOW com intervalo horário explícito, por exemplo
-`gsmap_now.20261019.1200_1300.dat.gz`, usando o horário inicial como rótulo temporal
-do produto. Arquivos de meia hora (`HH30`) não entram na sequência horária.
+The reader also accepts NOW names with explicit intervals, such as
+`gsmap_now.20261019.1200_1300.dat.gz`; the initial hour identifies the
+observation. Half-hour (`HH30`) files are outside the hourly sequence.
 
-Acesso operacional FTP:
+For operational FTP access:
 
 ```bash
 export FTP_JAXA_HOST=hokusai.eorc.jaxa.jp
-export FTP_JAXA_USER='seu_usuario'
-export FTP_JAXA_PASSWORD='sua_senha'
+export FTP_JAXA_USER='your_username'
+export FTP_JAXA_PASSWORD='your_password'
 uv run --locked arafno --config config/latam.json --source ftp \
   --output-dir outputs --device auto
 ```
 
-Por padrão, os downloads FTP ficam no diretório temporário do sistema, em
-`nowcasting-<UID>/arafno`, e expiram após 24 horas. `--cache-ttl-hours 6`
-altera esse prazo; `--cache-dir` permite escolher outro cache gerenciado.
-A limpeza ocorre em cada execução FTP ou consulta agendada, inclusive quando
-a previsão já existe. Em uma execução manual isolada, a remoção ocorrerá na
-próxima execução ou pela política de limpeza do sistema. Dados passados via
-`--source local --input-dir` nunca são removidos pelo pipeline.
+By default, downloads live under
+`<system-temp>/nowcasting-<UID>/arafno` and expire after 24 hours. Set
+`--cache-ttl-hours 6` to change retention or `--cache-dir` for another
+managed cache. Cleanup runs on each FTP invocation or scheduled poll, even
+when the forecast already exists. With isolated manual runs, expired files
+remain until the next run or operating-system cleanup. The pipeline never
+deletes files supplied through `--source local --input-dir`.
 
-As credenciais são lidas somente no modo FTP, não são gravadas nos manifestos e não
-devem entrar no repositório. O serviço usa o FTP da referência. Há timeout,
-até três tentativas, download temporário e validação do gzip antes de publicar o
-cache. Cache inválido é baixado novamente. Sem horário explícito, o modo FTP recusa
-dados futuros ou com mais de `--max-age-hours` (padrão: 12 horas).
+Credentials are read only in FTP mode and are never stored in manifests.
+Keep them out of the repository. FTP requests have a timeout and up to three
+attempts. A download is held temporarily and its gzip is validated before it
+enters the cache; invalid cached files are fetched again. Without an explicit
+run time, FTP mode rejects future observations or those older than
+`--max-age-hours` (default: 12 hours).
 
-Para reprocessar um arquivo histórico, configure `remote_directory` com o diretório
-de arquivo disponibilizado pelo provedor. Templates `%Y/%m/%d` são expandidos para
-todos os dias da janela, inclusive na virada de dia, e exigem `--run-time`.
-`/now/latest` só contém arquivos recentes; informar uma data antiga não cria acesso
-ao histórico. Os caminhos da configuração são relativos ao JSON; caminhos da CLI
-são relativos ao diretório de execução.
+To reprocess historical files, configure `remote_directory` with the
+provider's archive path. Templates such as `%Y/%m/%d` expand across every
+day in the input window and require `--run-time`. `/now/latest` only contains
+recent files; an old timestamp does not make the archive available. Paths in
+the JSON are relative to that file; CLI paths are relative to the working
+directory.
 
-## Contrato científico e espacial
+For continuous operation, follow the [systemd scheduling guide](deploy/README.md).
+`--source ftp --scheduled` performs one idempotent poll. The timer checks every
+five minutes and runs inference only for a new hourly issue. It requires a
+complete window, reuses cached data, and retries transport failures and
+incomplete uploads. Units must be installed and enabled on the operational
+host; generating them does not activate the service.
 
-Para operação contínua, siga [Agendamento com systemd](deploy/README.md). O modo
-`--source ftp --scheduled` faz uma consulta idempotente: o timer consulta a cada
-cinco minutos, e a inferência só é executada para uma nova emissão horária.
-Ele exige uma janela completa, reutiliza o cache e mantém retentativas para falhas
-de transporte e arquivos ainda incompletos. As unidades precisam ser instaladas
-e ativadas na máquina de operação; não estão ativas por terem sido geradas.
+## Scientific and spatial contract
 
+- Verified checkpoint shape: input `[1, 6, 880, 970]`, embedding 256,
+  depth 8, 10 × 10 patches, one-hour model output. Dimensions are
+  reconstructed from the checkpoint, checked against the configured domain,
+  and loaded with `strict=True` and `weights_only=True`.
+- The reader uses little-endian float32 in a global 1200 × 3600 grid,
+  converts longitudes from 0–360° to −180–180°, and crops
+  `[-120, -55, -23, 33]`. The resulting 0.1° grid starts at pixel center
+  `(-119.95, 32.95)` with north at the top.
+- Normalization is `(log1p(rain) - mean) / std`, using the supplied
+  `.npy` files. Output uses `max(expm1(prediction * std + mean), 0)`.
+  The next autoregressive step receives the normalized prediction, not
+  denormalized or clipped rainfall.
+- GeoTIFF values are **precipitation rates in mm/h**, not accumulations.
+  `run_time` is the last input timestamp and
+  `valid_time = run_time + lead_hours`. Timestamps retain the source
+  product's convention.
+- Finite negative inputs, including −99, become **zero mm/h before
+  normalization**. They are not counted as missing and do not create NoData.
+  Negative values in normalized space remain valid.
+- NaN and infinite inputs are missing. The operational setting
+  `missing_policy: "normalized_zero"` fills missing values with zero in
+  normalized space, matching the reference's NaN treatment; that is not
+  equivalent to zero rainfall. `error` stops on any missing input;
+  `zero_rain` fills zero mm/h before normalization. With a filling policy,
+  pixels missing in any input receive NoData in every forecast. Each frame
+  must also satisfy `max_missing_fraction` (default: 5%). This mask does
+  not quantify uncertainty propagated by the model's spatial filters.
 
-- Pesos inspecionados: entrada `[1, 6, 880, 970]`, embedding 256, profundidade 8,
-  patches 10 × 10 e saída de uma hora. As dimensões são reconstruídas do checkpoint,
-  comparadas com o domínio e carregadas com `strict=True` e `weights_only=True`.
-- O leitor usa float32 little-endian, grade global 1200 × 3600, longitudes originais
-  0–360°, giro para −180–180° e recorte de bordas `[-120, -55, -23, 33]`.
-  A grade final tem 0,1°, centro inicial `(-119,95; 32,95)` e norte no topo.
-- Normalização: `(log1p(chuva) - média) / desvio`, com os dois `.npy` fornecidos.
-  A saída usa `max(expm1(previsão * desvio + média), 0)`. O próximo passo recebe a
-  previsão normalizada; não se realimenta a chuva desnormalizada ou truncada.
-- Os GeoTIFFs contêm **taxa de precipitação em mm/h**, não acumulado. O tempo de
-  referência é o timestamp do último arquivo de entrada; `valid_time = run_time +
-  lead_hours`. Os timestamps preservam a convenção do produto de origem e não são
-  substituídos pelo relógio da execução.
-- Valores finitos menores que zero, incluindo −99, são convertidos em **zero mm/h
-  antes da normalização**. Esses pixels não contam como faltantes e não geram
-  NoData. Valores negativos no espaço normalizado são válidos e não são truncados.
-- NaN e infinitos de entrada continuam sendo faltantes. A configuração operacional
-  usa `missing_policy: "normalized_zero"`, preenchendo com zero no espaço
-  normalizado, como o tratamento de NaN na inferência de referência. Isso não
-  equivale a zero de chuva. A opção `error` interrompe se houver qualquer faltante;
-  `zero_rain` preenche zero mm/h antes da normalização. Nas opções de preenchimento, pixels
-  com qualquer faltante na janela recebem NoData em todas as previsões. Cada quadro
-  também está sujeito a `max_missing_fraction` (padrão 5%). Essa máscara não mede
-  a propagação da incerteza pelo modelo, cujos filtros têm alcance espacial global.
+**Scientific validation remains open.** The reference inference used NRT,
+whereas this operational pipeline uses NOW. Forecast skill with NOW needs
+evaluation. The checkpoint does not record training latitude order.
+`model_latitude_order: "north_to_south"` follows the operational reference
+but must be checked against georeferenced training data. If training used
+south-to-north order, set `south_to_north`; the pipeline flips inputs and
+returns outputs to north-up order. Domain bounds come from the supplied
+scripts; weights confirm grid size only. Increasing `--steps` does not
+establish skill beyond the evaluated horizon.
 
-**Validações científicas pendentes:** a inferência de referência utiliza NRT,
-enquanto a operação solicitada usa NOW. Isso muda o produto de entrada e requer
-avaliação de desempenho em NOW. A orientação espacial do treinamento não está
-registrada nos pesos: `model_latitude_order: "north_to_south"` segue a leitura do
-script operacional, mas precisa ser comparada com uma amostra real de treinamento.
-Se ela for sul→norte, altere para `south_to_north`; o pipeline inverte a entrada
-e reconverte a saída para norte no topo. O manifesto registra essa verificação
-como pendente. Os limites geográficos vieram dos scripts; os pesos confirmam
-somente o tamanho da grade, não os limites. Aumentar `--steps` é possível, mas não
-comprova habilidade preditiva além do horizonte avaliado originalmente.
+Provider format references:
+[GSMaP NOW](https://sharaku.eorc.jaxa.jp/GSMaP/document/DataFormatDescription_NOW.pdf)
+and [GSMaP NRT](https://sharaku.eorc.jaxa.jp/GSMaP/document/new/DataFormatDescription_NRT8.pdf).
 
-Formato binário e coordenadas do provedor:
-[documentação oficial GSMaP NOW](https://sharaku.eorc.jaxa.jp/GSMaP/document/DataFormatDescription_NOW.pdf)
-e [GSMaP NRT](https://sharaku.eorc.jaxa.jp/GSMaP/document/new/DataFormatDescription_NRT8.pdf).
-
-## Saída e rastreabilidade
+## Output and provenance
 
 ```text
 outputs/arafno/gsmap_now/2026/10/19/1200Z/
@@ -177,43 +183,39 @@ outputs/arafno/gsmap_now/2026/10/19/1200Z/
 └── manifest.json
 ```
 
-Cada arquivo tem uma banda float32, EPSG:4326, pixels de área, NoData −9999,
-blocos 256 × 256 e compressão DEFLATE. Tags incluem modelo, versão, checksum dos
-pesos, produto, emissão, validade, antecedência e unidade. O manifesto acrescenta
-hashes das entradas e saídas, configuração, normalização, faltantes e versões de
-bibliotecas. A pasta da execução é publicada por rename no mesmo filesystem
-somente depois que todas as saídas estão completas. Falhas não publicam uma
-execução parcial; uma execução existente nunca é sobrescrita. Para refazer uma
-previsão com outra configuração ou versão, use outro `--output-dir`.
+Each file has one float32 band, EPSG:4326, area pixels, NoData −9999,
+256 × 256 tiling, and DEFLATE compression. Tags include the model, version,
+checkpoint hash, product, issue, valid time, lead, and unit. The manifest also
+records input and output hashes, configuration, normalization, missing-data
+information, and library versions. A run directory is renamed into place
+only after every output is complete. Failed runs do not publish partial
+forecasts; existing runs are never overwritten. Use another `--output-dir`
+for a different model or configuration.
 
-## Distribuição: avaliação
+## Distribution and verification
 
-A separação entre modelo, aquisição e entrypoint é adequada. Processamento e
-exportação também merecem módulos próprios: são contratos científicos e espaciais
-que precisam ser verificados independentemente do transporte e dos pesos.
+Separating the model, acquisition, and entrypoint is appropriate. Processing
+and export have their own modules because their scientific and spatial
+contracts must be checked independently of transport and weights.
 
-`01_ARAFNO` pode continuar como catálogo humano de modelos. O nome importável é
-`arafno`, dentro de `src/`, e o wheel contém o runtime privado e o código do modelo.
-Nenhuma outra pasta de modelo é necessária. Para
-distribuir uma versão, entregue **wheel + bundle de artefatos versionado +
-configuração**, mantendo pesos e estatísticas juntos e verificando seu manifesto.
-O SHA-256 detecta alterações, mas não substitui a proveniência do bundle.
+`01_ARAFNO` can remain a human-readable catalog directory. The importable
+package is `arafno`; its wheel includes the private runtime and model code.
+For distribution, ship the **wheel, versioned artifact bundle, and
+configuration** together, keeping weights and statistics paired and checking
+their manifest. SHA-256 detects changes but does not establish provenance.
 
-Os 93 MB de pesos devem ir para releases, armazenamento de objetos ou Git LFS;
-estão ignorados no Git comum. Os `.npy` e o manifesto podem ser versionados.
-Antes de uma distribuição pública, registre licença e origem dos pesos e as
-condições aplicáveis de redistribuição dos dados. Nenhuma licença foi presumida.
-Os originais em `reference/` servem à auditoria e não são entrypoints mantidos.
+The 93 MB checkpoint belongs in a release, object storage, or Git LFS; it is
+ignored by ordinary Git. The `.npy` files and manifest may be versioned.
+Before public distribution, establish the license, weight provenance, and
+applicable data redistribution terms. The reference assets are for auditing,
+not maintained entrypoints.
 
-Um GeoTIFF por emissão e antecedência facilita SIG e consumo independente, sem
-misturar previsões que têm a mesma validade e emissões diferentes. Para servir
-recortes remotos em grande escala, uma evolução é converter para COG e catalogar
-com STAC; estes arquivos são GeoTIFFs tiled comuns, não COGs certificados. Para
-verificação científica de grandes séries, Zarr continua complementar, com eixos
-de emissão e antecedência separados. Cache bruto, artefatos do modelo e produtos
-derivados têm ciclos de vida distintos e não devem compartilhar uma pasta plana.
-
-## Verificação
+One GeoTIFF per issue and lead simplifies GIS use without merging forecasts
+with the same valid time but different issues. Large remote services could
+later add COG and STAC; these are ordinary tiled GeoTIFFs, not certified COGs.
+Zarr remains useful for large scientific series with separate issue and lead
+axes. Raw cache, model artifacts, and derived products have different life
+cycles and should not share one flat directory.
 
 ```bash
 uv run --locked pytest
@@ -221,9 +223,8 @@ uv run --locked ruff check src tests
 uv build
 ```
 
-Os testes usam dados sintéticos identificáveis e modelos pequenos para verificar
-tempo, orientação, normalização, aquisição simulada, carregamento estrito e
-GeoTIFF. Isso testa o software e não substitui validação meteorológica com NOW.
-
-Veja [VALIDATION.md](VALIDATION.md) para os resultados obtidos nesta entrega,
-incluindo a execução dos pesos reais e a localização dos GeoTIFFs sintéticos.
+Tests use identifiable synthetic data and small models to check time,
+orientation, normalization, simulated acquisition, strict loading, and
+GeoTIFF export. They do not replace meteorological validation with NOW.
+See [VALIDATION.md](VALIDATION.md) for recorded results and synthetic output
+locations.

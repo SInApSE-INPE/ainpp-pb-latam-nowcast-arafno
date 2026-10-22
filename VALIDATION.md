@@ -1,140 +1,117 @@
-# Validação realizada
+# ARAFNO validation record
 
-Data: 19 de outubro de 2026. Ambiente de execução: Linux, Python 3.12, CPU.
+Initial validation: October 19, 2026. Environment: Linux, Python 3.12, CPU.
 
-## Resultados
+## Initial results
 
-- `pytest -q`: **13 testes aprovados**. Cobertura de janela horária e virada do dia,
-  nomes NOW com intervalo, timezone, recorte com marcadores assimétricos,
-  orientação, normalização, faltantes, arquivo inválido, pesos incompatíveis,
-  integridade dos artefatos, coordenadas GeoTIFF, inferência integrada, publicação
-  sem sobrescrita, falha de escrita e cache FTP simulado.
-- `ruff check src tests`: aprovado.
-- `uv build`: wheel e pacote de fontes gerados. Ambos excluem os pesos e os
-  scripts de referência; estes são distribuídos separadamente.
-- Checkpoint real carregado estritamente. A comparação com as classes originais
-  de `reference/model.py`, usando os mesmos pesos e uma entrada nula normalizada,
-  apresentou diferença absoluta máxima **0,0** em uma previsão de uma hora.
-- Pipeline completo executado com o checkpoint real e seis binários GSMaP
-  **sintéticos**. Foram gerados seis GeoTIFFs de 880 × 970 pixels. Todos foram
-  reabertos e tiveram CRS, bordas, horários, unidade, valores finitos não negativos
-  e SHA-256 conferidos contra o manifesto.
+- `pytest -q`: **13 tests passed**. Coverage included hourly windows across
+  midnight, NOW interval names, timezone handling, asymmetric crop markers,
+  orientation, normalization, missing data, invalid files, incompatible weights,
+  artifact integrity, GeoTIFF coordinates, integrated inference, overwrite
+  protection, write failures, and simulated FTP caching.
+- `ruff check src tests` passed. `uv build` produced a wheel and source
+  archive without weights or reference scripts.
+- The real checkpoint loaded strictly. The same weights and normalized zero
+  input produced a maximum absolute difference of **0.0** against the
+  classes in `reference/model.py` for a one-hour prediction.
+- The complete pipeline used the real checkpoint with six **synthetic**
+  GSMaP binaries and produced six 880 × 970 GeoTIFFs. Reopened outputs
+  passed CRS, bounds, times, units, finite nonnegative values, and
+  manifest SHA-256 checks.
 
-Os produtos sintéticos estão em:
+Synthetic outputs are under:
 
 ```text
 outputs/validation-synthetic/arafno/gsmap_now/2000/01/01/0500Z/
 ```
 
-Esses arquivos demonstram o funcionamento técnico; **não são previsões
-meteorológicas reais**. Os binários sintéticos de entrada foram temporários e
-removidos ao final do ensaio. O manifesto conserva seus nomes e hashes.
+They demonstrate technical behavior, **not real meteorological forecasts**.
+Temporary synthetic inputs were removed after testing; their names and hashes
+remain in the manifest.
 
-## O que ainda não foi validado
+The real JAXA FTP server was not tested because credentials were unavailable.
+Listing, caching, and recovery of corrupted files used simulated transport.
+Training latitude order and domain bounds are absent from the checkpoint.
+The configuration follows the supplied scripts' north-to-south orientation
+and bounds. The reference used NRT, while operational inference uses NOW;
+skill with NOW remains unverified. GPU/CUDA and the live scheduled service
+were not run in this initial validation.
 
-- Download no servidor JAXA real: as variáveis de credenciais não estavam
-  configuradas. Listagem, cache e recuperação de arquivo corrompido foram testados
-  com um transporte simulado.
-- Ordem das latitudes e limites efetivamente utilizados no treinamento:
-  não constam do checkpoint. A configuração usa a orientação norte→sul do
-  script operacional e o domínio dos scripts fornecidos.
-- Habilidade meteorológica com NOW: os scripts de inferência originais usavam
-  NRT. O pipeline usa NOW por solicitação, preservando as estatísticas fornecidas.
-- GPU/CUDA e serviço operacional agendado: não foram executados neste ensaio.
+## Run with real NOW files
 
-As instruções de execução e a avaliação da organização para distribuição estão
-no [README](README.md).
+After the user's FTP run, six files from October 19, 2026, 15:00–20:00 UTC
+were inspected. Each frame contained 0.29873%–0.38824% values of −99.
+The original `error` policy stopped as designed; the operational setting
+was changed to `normalized_zero` with a 5% per-frame threshold.
 
-## Execução com arquivos NOW reais
+A local CPU run over that cache published six GeoTIFFs for issue 20:00 UTC
+under `outputs/arafno/gsmap_now/2026/10/19/2000Z/`, valid from 21:00
+October 19 through 02:00 October 20. The union of missing pixels covered
+0.42549% of the domain and was marked NoData. This describes the behavior
+**before** the later negative-value correction. Training orientation and
+forecast skill with NOW were still unverified.
 
-Após a execução FTP feita pelo usuário, os seis arquivos de 19/10/2026, das 15h
-às 20h UTC, foram inspecionados no cache. Cada quadro apresentou entre 0,29873%
-e 0,38824% de pixels faltantes, todos com valor −99. A política `error` interrompia
-corretamente a execução; a configuração operacional foi ajustada para
-`normalized_zero`, mantendo o limite de 5% por quadro.
+## Negative values and configuration cleanup
 
-O pipeline foi reexecutado em CPU, em modo local sobre esse cache, com emissão
-às 20h UTC. Os seis GeoTIFFs foram publicados em
-`outputs/arafno/gsmap_now/2026/10/19/2000Z/`, com validade das 21h de 19/10 às
-02h de 20/10. A união dos pixels faltantes na janela corresponde a 0,42549% do
-domínio e permanece como NoData nas saídas. A orientação do treinamento e a
-habilidade meteorológica em NOW continuam pendentes de validação.
+As requested, finite negative values now become zero mm/h before
+normalization under every `missing_policy`. NaN and infinities still
+follow the missing-data policy. Thus, the earlier −99-as-NoData result above
+is a historical record. After this change, **18 tests passed**, including
+negative inputs under all three policies and NaN/±infinity. Ruff passed.
+Reprocessing the six real cached files produced no missing pixels or output
+mask. Previously published GeoTIFFs were not rewritten; use another
+`--output-dir` to rerun the same issue.
 
-## Ajuste posterior: negativos convertidos em zero
+Later, duplicate configuration defaults were removed: operational JSON
+fields no longer have matching dataclass defaults. Native resolution and
+global grid live in `formats.py`, with dimensions and byte size derived.
+CRS and units use one source in export and manifests. Architecture is
+reconstructed from the checkpoint; the reference product comes from the
+artifact manifest. **20 tests** and Ruff passed. Real weights and the six
+cached observations still produced an unmasked `(6, 880, 970)` input.
+Existing forecasts remained unchanged.
 
-Por solicitação do usuário, valores finitos negativos agora são convertidos em
-zero mm/h antes da normalização, independentemente de `missing_policy`. NaN e
-infinitos continuam seguindo a política de faltantes. Assim, a descrição de −99
-como NoData na execução acima registra o comportamento anterior.
+## Scheduling and retries — October 20, 2026
 
-Após o ajuste, **18 testes passaram**, incluindo negativos sob as três políticas
-de faltantes e NaN/±infinito. Ruff também passou. O processamento dos seis arquivos
-reais do cache apresentou zero pixels faltantes e nenhuma máscara de saída.
-Os GeoTIFFs da execução anterior não foram regenerados; para reprocessar a mesma
-emissão, use um novo `--output-dir`.
+- **29 tests passed**, including no-data polls, completed issues, concurrent
+  poll protection, pinning the discovered hour, retry after failure,
+  stale/future data, and integrity of published outputs.
+- Simulated transfers covered network errors, incomplete gzip grids,
+  exponential delays, exhausted retries, and avoidance of invalid cache files.
+- Ruff, `systemd-analyze verify`, and `systemd-analyze calendar` passed.
+  Transport parameters have one source in JSON `ftp`; poll frequency has
+  one source in the `.timer`.
 
-## Remoção de parâmetros redundantes
+No service was activated: the user bus returned `Operation not permitted`
+in this session. Continuous polling against real FTP was not performed.
+See [deploy/README.md](deploy/README.md) for installation and credentials.
 
-As opções operacionais do JSON não têm mais valores padrão duplicados nas
-dataclasses. A resolução nativa e a grade global pertencem a `formats.py`, com
-dimensões e tamanho binário derivados. CRS e unidade usam a mesma fonte no
-exportador e no manifesto. A arquitetura é reconstruída do checkpoint, sem
-hiperparâmetros padrão no construtor, e o produto de referência vem do manifesto
-de artefatos.
+## Runtime distribution — October 21, 2026
 
-**20 testes aprovados** e Ruff aprovado após a alteração. A conferência dos pesos
-reais e das seis observações do cache preservou a entrada `(6, 880, 970)`, sem
-pixels mascarados. Nenhuma previsão existente foi alterada.
+Acquisition, processing, GeoTIFF export, publication, and scheduling were
+first extracted into `shared/nowcasting_runtime`; ARAFNO's 29 tests passed
+again. Units were regenerated and verified without activation.
 
-## Agendamento e retentativas — 20/10/2026
+The final independent distribution embeds its private runtime under
+`src/arafno/_runtime/`. `uv lock --offline` and `uv build --offline`
+passed at that stage. The wheel contains 11 private runtime modules and has
+no dependency on `nowcasting-runtime` or `../shared`; importing from an
+extracted wheel outside the checkout also passed. The 29 tests passed again
+with `uv run --offline --locked --group dev pytest -q`. Runtime changes
+needed by multiple independent models must be applied to each model.
 
-- **29 testes aprovados**, incluindo polling sem dados, emissão já concluída,
-  proteção contra concorrência, fixação do timestamp descoberto, nova consulta
-  após falha, dados antigos/futuros e integridade das saídas já publicadas.
-- Transferências simuladas cobriram erro de rede, gzip com grade incompleta,
-  recuperação com espera crescente e esgotamento das tentativas sem publicar
-  um arquivo inválido no cache.
-- Ruff aprovado. As unidades geradas passaram por `systemd-analyze verify`;
-  a expressão de calendário foi validada com `systemd-analyze calendar`.
-- Os parâmetros de transporte têm uma única fonte na seção `ftp` do JSON;
-  a frequência tem uma única fonte no arquivo `.timer`.
+## Temporary download retention — October 21, 2026
 
-Não houve ativação do serviço: o acesso ao bus de usuário nesta sessão retornou
-`Operation not permitted`. Não foi executado polling contínuo contra o FTP real.
-Instalação, credenciais e ativação estão descritas em [deploy/README.md](deploy/README.md).
+The default FTP cache moved to the system temporary directory, isolated by
+user and model. `--cache-ttl-hours` controls retention (24 hours by
+default). Cleanup removes only expired files in managed namespaces; it does
+not touch local inputs or unrelated directories. It also runs when a poll
+finds an already-completed issue.
 
-## Runtime compartilhado — 21/10/2026
-
-Aquisição, processamento, GeoTIFF, publicação e agendamento foram extraídos para
-`shared/nowcasting_runtime`, utilizado também pelo novo pipeline Xception. Os
-imports e comandos ARAFNO permanecem disponíveis por adaptadores locais.
-**Os 29 testes ARAFNO passaram novamente** no ambiente próprio após a extração.
-As unidades systemd foram regeneradas e verificadas, sem ativação. O pacote e o
-lock foram atualizados para instalar o runtime local; execute `uv sync --locked`
-ao atualizar outra instalação.
-
-## Distribuição independente — 21/10/2026
-
-- O runtime de aquisição, processamento, publicação e agendamento está em
-  `src/arafno/_runtime/` e é empacotado no mesmo wheel do modelo.
-- `uv lock --offline` e `uv build --offline` passaram. O wheel contém os 11
-  módulos do runtime privado e não declara dependência de `nowcasting-runtime`
-  nem de um caminho `../shared`. A importação do runtime a partir de um wheel
-  extraído em `/tmp`, fora do checkout, também passou.
-- 29 testes passaram com `uv run --offline --locked --group dev pytest -q`.
-- A independência exige manter correções do runtime em cada modelo que precisar
-  delas; mudanças em uma pasta não atualizam automaticamente as outras.
-
-## Retenção temporária dos downloads — 21/10/2026
-
-- O cache FTP padrão passou para o diretório temporário do sistema, isolado por
-  usuário e modelo. `--cache-ttl-hours` define a retenção (24 horas por padrão).
-- A limpeza remove somente downloads vencidos em namespaces gerenciados; arquivos
-  locais e outros diretórios não são tocados. Ela roda também no polling que
-  encontra uma emissão já concluída.
-- **31 testes aprovados** com `uv run --offline --locked --group dev pytest -q`;
-  Ruff e `uv lock --offline --check` aprovados. O calendário de cinco minutos
-  passou em `systemd-analyze calendar`.
-- A reconstrução do wheel nesta sessão ficou pendente: o cache offline não
-  contém `hatchling`, exigido pelo build. O build anterior à alteração passou;
-  a alteração atual foi validada por testes no código-fonte.
+**31 tests passed** with
+`uv run --offline --locked --group dev pytest -q`; Ruff and
+`uv lock --offline --check` passed. The five-minute timer expression passed
+`systemd-analyze calendar`. Rebuilding the wheel in that offline session
+was blocked because `hatchling`, required by the build, was absent from the
+cache. The previous build had passed; the current source changes were
+validated by tests.

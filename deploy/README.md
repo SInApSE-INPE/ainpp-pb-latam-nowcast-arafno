@@ -1,59 +1,59 @@
-# Agendamento com systemd
+# Scheduling with systemd
 
-O agendamento é feito por um **timer do systemd**, separado do processamento.
-O serviço executa uma consulta com `--scheduled` e termina. O timer consulta
-novamente a cada cinco minutos, independentemente de ter encontrado dados novos.
-Não é necessário manter um terminal aberto ou um loop Python em segundo plano.
+A systemd timer handles scheduling separately from processing. The service runs
+one poll with `--scheduled` and exits. The timer polls every five minutes,
+whether or not new data were found. No open terminal or background Python loop
+is required.
 
-O contrato deste modelo é uma sequência **horária**: somente nomes `HH00` são
-selecionados. O NOW também possui atualizações sub-horárias, mas `HH30` não é
-entrada deste pipeline. Consultar a cada cinco minutos reduz a espera depois da
-publicação de uma nova emissão horária, sem presumir um minuto exato de chegada.
-A detecção acontece na primeira consulta bem-sucedida após a publicação; não há
-notificação instantânea enviada pelo provedor.
+This model consumes an **hourly** sequence: only `HH00` files are selected.
+GSMaP NOW also has subhourly updates, but `HH30` is outside this pipeline's
+input contract. Polling every five minutes reduces the delay after a new hourly
+issue appears; it does not assume an exact publication minute. Detection occurs
+at the first successful poll after publication. The provider does not send an
+instant notification.
 
-## Funcionamento de cada consulta
+## What happens on each poll
 
-1. Obtém um lock exclusivo para o produto e o diretório de saída. Outra consulta
-   agendada em andamento resulta em `BUSY`, sem iniciar uma segunda execução.
-2. Lista o FTP e identifica o horário mais recente. Não carrega os pesos nem
-   baixa arquivos se esse horário já tem uma saída completa e íntegra.
-3. Exige dados atuais (`--max-age-hours`, definido na CLI), fixa o horário da
-   consulta e tenta obter a janela completa exigida pelo checkpoint.
-4. Se faltam horários, registra `WAITING` e termina normalmente. O timer consulta
-   novamente depois. Falhas de rede ou de download são tentadas conforme `ftp`
-   em `config/latam.json`: três tentativas por operação, timeout de 60 segundos,
-   espera inicial de 30 segundos e crescimento exponencial limitado a 120 segundos.
-   Com três tentativas, as esperas são de 30 e 60 segundos.
-5. Um gzip truncado, CRC inválido ou tamanho binário errado também dispara uma
-   nova tentativa de transferência. O cache só recebe arquivos validados.
-6. Se todas as tentativas falham, o processo retorna erro e o journal registra a
-   falha. O timer tenta outra vez no próximo disparo. Não existe um segundo
-   agendador de retentativas concorrendo com o timer.
-7. Gera os GeoTIFFs e publica o manifesto completo. As próximas consultas mostram
-   `UP_TO_DATE` para essa emissão; os arquivos não são reprocessados nem sobrescritos.
+1. Acquire an exclusive lock for the product and output directory. A concurrent
+   scheduled poll reports `BUSY` and does not start another run.
+2. List the FTP directory and identify the latest hour. If that issue already
+   has a complete, verified output, neither weights nor input files are loaded.
+3. Enforce freshness with `--max-age-hours`, pin the discovered hour, and
+   request the complete window required by the checkpoint.
+4. If hours are missing, log `WAITING` and exit normally; the timer retries
+   later. Network and download failures use the `ftp` settings in
+   `config/latam.json`: three attempts per operation, a 60-second timeout, and
+   exponential delays starting at 30 seconds and capped at 120 seconds. Three
+   attempts produce delays of 30 and 60 seconds.
+5. A truncated gzip, invalid CRC, or wrong binary size also triggers a new
+   transfer attempt. Only validated files enter the cache.
+6. If all attempts fail, the service exits with an error recorded in the
+   journal. The timer retries on its next activation; there is no competing
+   retry scheduler.
+7. Write the GeoTIFFs and publish the complete manifest. Later polls report
+   `UP_TO_DATE`; completed issues are neither reprocessed nor overwritten.
 
-O sistema prioriza a **emissão mais recente disponível**. Após uma interrupção
-longa, não recupera automaticamente todas as emissões intermediárias. O timer
-persistente retoma a consulta ao iniciar a sessão/servidor, mas não cria uma fila
-de previsões históricas. Para isso, use reprocessamento com `--run-time` fora do
-modo agendado. Revisões dos dados sob o mesmo timestamp não geram nova previsão.
+The service prioritizes the **latest available issue**. After a long outage it
+does not automatically backfill every intermediate issue. The persistent timer
+resumes polling when the session or server starts, but does not build a
+historical forecast queue. Use `--run-time` outside scheduled mode to
+reprocess an older issue. Changes to data under an existing timestamp do not
+trigger a new forecast.
 
-## Retenção dos dados de entrada
+## Input retention
 
-Os downloads FTP ficam no diretório temporário do sistema, isolados por
-usuário e modelo (`nowcasting-<UID>/<modelo>`). O prazo padrão é 24 horas
-desde o download. Cada disparo do serviço remove os arquivos expirados,
-inclusive quando a previsão já está pronta; não apaga entradas locais
-fornecidas por `--input-dir`. A opção `--cache-ttl-hours` altera o prazo
-e `--cache-dir` escolhe outro cache gerenciado. A limpeza também ocorre
-na próxima execução FTP manual, mas não há processo residente para
-apagar arquivos enquanto o timer estiver desativado. Dados antigos em
-`data/raw/` não são removidos automaticamente por esta mudança.
+FTP downloads live in the system temporary directory, isolated by user and
+model (`nowcasting-<UID>/<model>`). Default retention is 24 hours from
+download. Every service invocation removes expired files, even when the
+forecast is already complete. Inputs supplied through `--input-dir` are never
+deleted. Use `--cache-ttl-hours` to change retention or `--cache-dir` to
+select another managed cache. The next manual FTP run also performs cleanup.
+There is no resident cleanup process while the timer is disabled. Existing
+files under `data/raw/` are not removed automatically.
 
-## Preparação
+## Prepare
 
-Execute na pasta `01_ARAFNO`:
+Run from the `01_ARAFNO` directory:
 
 ```bash
 uv sync --locked
@@ -62,25 +62,25 @@ chmod 600 .env
 ${EDITOR:-vi} .env
 ```
 
-Preencha usuário e senha no arquivo `.env`. O formato é `CHAVE=valor`, sem
-`export`. O arquivo é ignorado pelo Git e lido pelo systemd; a CLI executada
-manualmente continua recebendo variáveis do ambiente. Não use credenciais na
-linha de comando do serviço. Senhas com espaços devem ser colocadas entre aspas
-conforme o formato `EnvironmentFile` do systemd.
+Enter the username and password in `.env` as `KEY=value` lines, without
+`export`. Git ignores this file; systemd reads it through `EnvironmentFile`.
+Manual CLI runs still read environment variables. Do not put credentials on the
+service command line. Quote passwords containing spaces according to
+systemd's `EnvironmentFile` syntax.
 
-Gere as unidades com o caminho absoluto desta instalação:
+Generate units containing this installation's absolute path:
 
 ```bash
 .venv/bin/python deploy/render_units.py
 systemd-analyze verify deploy/generated/arafno-now.service deploy/generated/arafno-now.timer
 ```
 
-O gerador **somente escreve em `deploy/generated/`**. Ele não modifica serviços
-do computador nem ativa o agendamento. Após mover o projeto, gere e instale as
-unidades novamente. A instalação deve estar em um filesystem acessível na
-máquina que vai executar o serviço, com suporte a locks `flock`.
+The generator **only writes to `deploy/generated/`**. It does not modify
+system services or enable the timer. Regenerate and reinstall the units after
+moving the project. The installation must be accessible from the service host
+on a filesystem that supports `flock`.
 
-## Instalação e ativação no seu usuário
+## Install and enable for your user
 
 ```bash
 mkdir -p "$HOME/.config/systemd/user"
@@ -90,31 +90,30 @@ systemctl --user enable --now arafno-now.timer
 systemctl --user start arafno-now.service
 ```
 
-O último comando executa uma consulta imediatamente. O timer mantém as próximas
-consultas. Os argumentos de execução usam os padrões da mesma CLI do pipeline,
-sem duplicar horizonte, dispositivo ou diretórios na unidade. Ela usa a `.venv`
-já instalada, sem chamar `uv sync` ou instalar pacotes a cada consulta.
+The last command polls immediately; the timer handles later polls. Runtime
+arguments use the pipeline CLI defaults without duplicating the horizon,
+device, or directories in the unit. The service uses the installed `.venv`;
+it does not run `uv sync` on every poll.
 
-Para continuar executando após logout e iniciar no boot, o gerenciador de serviços
-do usuário precisa de **linger**. Verifique com:
+For execution after logout and at boot, the user service manager needs
+**linger**:
 
 ```bash
 loginctl show-user "$USER" -p Linger
 ```
 
-Se retornar `Linger=no`, peça ao administrador para habilitar:
+If it reports `Linger=no`, ask an administrator to enable it:
 
 ```bash
 sudo loginctl enable-linger "$USER"
 ```
 
-Se `systemctl --user` não puder conectar ao bus, execute esses comandos em uma
-sessão normal do usuário na máquina de operação. Em um cluster, o administrador
-deve indicar um nó de serviço permitido; não presuma que processos permanentes
-são permitidos no nó de login. Nesta sessão de desenvolvimento o acesso ao bus
-foi negado, portanto **as unidades foram preparadas, mas não ativadas**.
+If `systemctl --user` cannot connect to the bus, run the commands from a
+normal user session on the operational host. On a cluster, ask the
+administrator which service node permits persistent processes. These units
+were prepared here, but were **not installed or enabled**.
 
-## Acompanhamento e ajustes
+## Monitor and adjust
 
 ```bash
 systemctl --user list-timers arafno-now.timer
@@ -122,29 +121,30 @@ systemctl --user status arafno-now.service
 journalctl --user -u arafno-now.service -f
 ```
 
-`inactive (dead)` para um serviço `oneshot` que concluiu com sucesso é normal;
-o timer deve permanecer ativo. Os resultados usam a mesma árvore
-`outputs/arafno/gsmap_now/AAAA/MM/DD/HHMMZ/`.
+`inactive (dead)` is normal for a successful `oneshot` service; the timer
+should remain active. Outputs use
+`outputs/arafno/gsmap_now/YYYY/MM/DD/HHMMZ/`.
 
-- Frequência: altere somente `OnCalendar` em `deploy/arafno-now.timer`. O valor
-  entregue é `*-*-* *:0/5:00 UTC`. Depois gere, copie as unidades novamente e rode
-  `systemctl --user daemon-reload` e `systemctl --user restart arafno-now.timer`.
-- Retentativas: altere somente a seção `ftp` em `config/latam.json`. O arquivo é
-  relido a cada consulta. Configurações antigas precisam incluir essa seção.
-- Horizonte/dispositivo/pastas: acrescente os argumentos necessários ao comando
-  gerado pelo script e regenere a unidade. Para outra versão dos pesos ou outra
-  configuração científica, utilize outro `--output-dir`, pois emissões concluídas
-  no mesmo diretório são preservadas.
-- Prazo de uma execução: `TimeoutStartSec=20min` limita uma consulta travada.
-  O timer não inicia novamente o mesmo serviço enquanto ele ainda está rodando.
-- Parar novas consultas: `systemctl --user disable --now arafno-now.timer`.
-  Para interromper também uma execução em andamento, use
+- Poll frequency: edit only `OnCalendar` in `deploy/arafno-now.timer`. The
+  supplied value is `*-*-* *:0/5:00 UTC`. Regenerate and copy the units, then
+  run `systemctl --user daemon-reload` and
+  `systemctl --user restart arafno-now.timer`.
+- Retry policy: edit only the `ftp` section of `config/latam.json`, which is
+  reloaded on every poll. Older configurations must include this section.
+- Horizon, device, and directories: add the needed arguments to the command
+  generated by the script, then regenerate the unit. Use another
+  `--output-dir` for a different weight version or scientific configuration;
+  completed issues in one directory are preserved.
+- Execution limit: `TimeoutStartSec=20min` bounds a stuck poll. The timer
+  does not restart a service that is still running.
+- Stop new polls: `systemctl --user disable --now arafno-now.timer`. To stop
+  a run already in progress, use
   `systemctl --user stop arafno-now.service`.
 
-O lock protege invocações **agendadas** com o mesmo diretório e produto. Para uma
-execução manual paralela, escolha outro diretório de saída. Uma execução
-interrompida não publica uma emissão parcial. Interrupção forçada pode deixar
-pastas temporárias ocultas, que não contam como previsões completas.
+The lock protects **scheduled** invocations with the same directory and
+product. Choose a different output directory for a parallel manual run. An
+interrupted run does not publish a partial issue; forced termination may leave
+hidden temporary directories that do not count as complete forecasts.
 
-Referências: [timers do systemd](https://www.freedesktop.org/software/systemd/man/252/systemd.timer.html),
-[formato GSMaP NOW](https://sharaku.eorc.jaxa.jp/GSMaP/document/new/DataFormatDescription_NOW.pdf).
+References: [systemd timers](https://www.freedesktop.org/software/systemd/man/252/systemd.timer.html)
+and [GSMaP NOW format](https://sharaku.eorc.jaxa.jp/GSMaP/document/new/DataFormatDescription_NOW.pdf).

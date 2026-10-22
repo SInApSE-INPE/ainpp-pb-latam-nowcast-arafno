@@ -46,7 +46,7 @@ class GSMaPZarrSequenceDataset(torch.utils.data.Dataset):
 
         for dim in ("time", "lat", "lon"):
             if dim not in self.ds.dims:
-                raise ValueError(f"Dimensão '{dim}' não encontrada no split '{self.split}'.")
+                raise ValueError(f"Dimension '{dim}' not found in split '{self.split}'.")
 
         self.time_len = int(self.ds.sizes["time"])
         self.h = int(self.ds.sizes["lat"])
@@ -55,7 +55,7 @@ class GSMaPZarrSequenceDataset(torch.utils.data.Dataset):
         total = self.input_len + self.target_len
         max_start = self.time_len - total
         if max_start < 0:
-            raise ValueError(f"Split '{self.split}' tem {self.time_len} timesteps; precisa de {total}.")
+            raise ValueError(f"Split '{self.split}' has {self.time_len} timesteps; requires {total}.")
 
         self.starts = np.arange(0, max_start + 1, self.stride, dtype=np.int64)
 
@@ -214,7 +214,7 @@ def infer_and_plot_all_leads_autoreg(
     )
 
     if index < 0 or index >= len(ds):
-        raise IndexError(f"index={index} fora do range [0, {len(ds)-1}]")
+        raise IndexError(f"index={index} outside range [0, {len(ds)-1}]")
 
     # model
     model = AFNO2D_OneStep(
@@ -248,7 +248,7 @@ def infer_and_plot_all_leads_autoreg(
     unit = "norm"
     if denorm:
         if mean_path is None or std_path is None:
-            raise ValueError("Para denorm=True, forneça mean_path e std_path")
+            raise ValueError("denorm=True requires mean_path and std_path")
         mean_log = float(np.load(mean_path).reshape(()))
         std_log = float(np.load(std_path).reshape(()))
 

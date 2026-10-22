@@ -1,4 +1,4 @@
-# Ambientes e caches Python
+# Python environments and caches
 .venv/
 __pycache__/
 *.py[cod]
@@ -11,11 +11,11 @@ __pycache__/
 .coverage.*
 htmlcov/
 
-# Pacotes gerados
+# Generated packages
 build/
 dist/
 
-# Dados e previsões gerados
+# Generated data and forecasts
 data/
 outputs/
 logs/
@@ -24,15 +24,16 @@ runs/
 *.tif
 *.tiff
 *.zarr/
+reference/
 
-# Pesos grandes; manifestos e estatísticas pequenas permanecem visíveis
+# Large weights; small manifests and statistics remain visible
 *.pth
 *.pt
 *.ckpt
 *.safetensors
 *.onnx
 
-# Segredos e arquivos locais de implantação
+# Secrets and local deployment files
 .env
 .env.*
 deploy/generated/
