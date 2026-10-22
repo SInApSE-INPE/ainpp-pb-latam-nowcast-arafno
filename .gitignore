@@ -1,0 +1,39 @@
+# Ambientes e caches Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# Pacotes gerados
+build/
+dist/
+
+# Dados e previsões gerados
+data/
+outputs/
+logs/
+runs/
+*.dat.gz
+*.tif
+*.tiff
+*.zarr/
+
+# Pesos grandes; manifestos e estatísticas pequenas permanecem visíveis
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+
+# Segredos e arquivos locais de implantação
+.env
+.env.*
+deploy/generated/
+*.log

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "architecture": {
+    "input_steps": 6,
+    "height": 880,
+    "width": 970,
+    "embed_dim": 256,
+    "depth": 8,
+    "patch_size": 10
+  },
+  "training_latitude_order": null,
+  "reference_input_product": "gsmap_nrt",
+  "training_domain_verified": false,
+  "files": {
+    "checkpoint": {
+      "name": "arafno.pth",
+      "sha256": "764168df2c7b0e9077c2b5e2d7b9cc4ea434bd922722196867a0b228fe6452cd"
+    },
+    "mean": {
+      "name": "gsmap_nrt+mvk_log_mean_ainpp-latin-america.npy",
+      "sha256": "fc60bf59e715a6ffeb3c92d784395d5a4ab3d0527acb66f0881f2011f5d77697"
+    },
+    "std": {
+      "name": "gsmap_nrt+mvk_log_std_ainpp-latin-america.npy",
+      "sha256": "8e09d7e62fbfaf6bcd6177abe9f1f1dfef455119053fc2e6af43a796d3aa5786"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arafno-inference"
+version = "0.1.0"
+description = "ARAFNO precipitation inference from GSMaP to GeoTIFF"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26,<3", "rasterio>=1.4,<2", "torch>=2.6,<3"]
+
+[project.scripts]
+arafno = "arafno.entrypoint:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+# CPU is the portable default. For CUDA installations, see README.md.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arafno"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/config", "/deploy", "/README.md", "/VALIDATION.md", "/pyproject.toml", "/uv.lock"]
+exclude = ["/deploy/generated"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
