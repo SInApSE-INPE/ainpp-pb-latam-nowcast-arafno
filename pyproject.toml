@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = ["numpy>=1.26,<3", "rasterio>=1.4,<2", "torch>=2.6,<3"]
 
 [project.scripts]
+arafno-download-artifacts = "arafno.download_artifacts:main"
 arafno = "arafno.entrypoint:main"
 
 [dependency-groups]
@@ -29,7 +30,14 @@ torch = { index = "pytorch-cpu" }
 packages = ["src/arafno"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/config", "/deploy", "/README.md", "/VALIDATION.md", "/pyproject.toml", "/uv.lock"]
+include = [
+    "/src", "/tests", "/config", "/tools", "/deploy",
+    "/artifacts/v1/manifest.json",
+    "/artifacts/v1/gsmap_nrt+mvk_log_mean_ainpp-latin-america.npy",
+    "/artifacts/v1/gsmap_nrt+mvk_log_std_ainpp-latin-america.npy",
+    "/Dockerfile", "/compose.yaml", "/.dockerignore",
+    "/README.md", "/VALIDATION.md", "/pyproject.toml", "/uv.lock",
+]
 exclude = ["/deploy/generated"]
 
 [tool.pytest.ini_options]

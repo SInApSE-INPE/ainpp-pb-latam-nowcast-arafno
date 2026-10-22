@@ -31,7 +31,9 @@ run `uv sync --locked`.
 ├── artifacts/v1/               # weights, mean, std, SHA-256 manifest
 ├── reference/                  # optional local reference scripts; ignored by Git
 ├── tests/                      # temporal, spatial, and integration checks
+├── tools/download_artifacts.py # download and verify the public bundle
 ├── deploy/                     # systemd timer, generator, installation guide
+├── Dockerfile / compose.yaml    # independent CPU container and polling service
 ├── data/raw/                   # optional local inputs; never deleted by pipeline
 └── outputs/                    # generated forecasts, excluded from Git
 ```
@@ -48,7 +50,7 @@ Each operational parameter has one source of truth:
 | Input source, directories, horizon, device, threads | CLI arguments and parser defaults |
 | Credentials | Environment variables |
 | FTP timeout and retry policy | `ftp` section of `config/latam.json` |
-| Poll frequency | `OnCalendar` in `deploy/arafno-now.timer` |
+| Poll frequency | `OnCalendar` for systemd, or `ARAFNO_POLL_INTERVAL_SECONDS` for Docker |
 
 The 0.1° resolution is part of the GSMaP binary contract, not a resampling
 option. Older JSON configurations must remove `resolution`. The effective
@@ -58,6 +60,29 @@ Local scripts under `reference/` can be retained for auditing; Git ignores
 this directory, and it is not required to install or run the operational
 pipeline. Their comments and display text were translated to English;
 model calculations were not changed.
+
+## Download model artifacts
+
+After the bundle has been uploaded to the public HTTP directory recorded in
+`artifacts/v1/manifest.json`, run this from the project directory:
+
+```bash
+uv run --locked arafno-download-artifacts
+
+# Or, without installing dependencies:
+python3 tools/download_artifacts.py
+```
+
+The expected server layout is
+`https://ftp.cptec.inpe.br/rainfall/ainpp-pb-latam/checkpoints/arafno/v1/`,
+containing `manifest.json`, `arafno.pth`, and the two normalization
+`.npy` files named in the manifest. The script reads the local manifest,
+downloads only missing or invalid files, checks each SHA-256, and replaces
+targets atomically. It needs only the Python standard library and does not
+load the model. Use `--list` to inspect the URLs without downloading, or
+`--base-url https://another-host/arafno/v1/` to use a mirror while retaining
+the same pinned hashes. The FTP host must expose these files through HTTP(S);
+this command does not use the FTP protocol.
 
 Use Python 3.11 or newer. From this directory:
 
@@ -129,6 +154,49 @@ five minutes and runs inference only for a new hourly issue. It requires a
 complete window, reuses cached data, and retries transport failures and
 incomplete uploads. Units must be installed and enabled on the operational
 host; generating them does not activate the service.
+
+## Run independently with Docker
+
+The CPU image contains the ARAFNO code, locked runtime dependencies,
+configuration, manifest, and normalization files. The large checkpoint is not
+included. At startup, the container verifies the local bundle and downloads
+any missing or invalid files from the public HTTP(S) URL in the manifest.
+If that server is unavailable, it retries after the configured poll interval;
+it starts FTP polling only once the bundle is valid.
+
+From `01_ARAFNO`, prepare `.env` with JAXA credentials, your host user and
+group IDs, and the interval in seconds:
+
+```bash
+cp deploy/docker.env.example .env
+chmod 600 .env
+id -u
+id -g
+# Edit .env: set FTP_JAXA_USER, FTP_JAXA_PASSWORD, ARAFNO_UID, and ARAFNO_GID.
+# Adjust ARAFNO_POLL_INTERVAL_SECONDS if needed; 300 means every five minutes.
+mkdir -p outputs
+docker compose up -d --build
+docker compose logs -f arafno
+```
+
+If `.env` already contains the FTP credentials, add the three `ARAFNO_*`
+settings instead of replacing it. The service runs one poll immediately after
+startup and waits `ARAFNO_POLL_INTERVAL_SECONDS` after each poll. It looks for
+new **hourly** GSMaP NOW inputs; shorter intervals reduce detection delay but
+do not make the provider publish data faster. Incomplete input windows and
+failed transfers are retried on the next poll. Completed issue times are
+skipped. The container prioritizes the newest issue and does not backfill a
+long outage automatically.
+
+`compose.yaml` mounts `artifacts/v1` and `outputs` from the host. This keeps
+the verified checkpoint and published GeoTIFFs when the container is rebuilt
+or replaced. FTP inputs stay in the container's temporary directory and are
+pruned after 24 hours by scheduled polls; they disappear when the container
+is removed. The container runs with your host UID/GID so it can write the
+mounted directories without changing their ownership. Stop the service with
+`docker compose down`; the stop grace period allows a running inference to
+finish. The host must allow outbound HTTPS to the checkpoint server and FTP
+to JAXA. No network port is exposed.
 
 ## Scientific and spatial contract
 
