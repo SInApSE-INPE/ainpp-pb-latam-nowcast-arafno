@@ -29,7 +29,7 @@ run `uv sync --locked`.
 │   ├── scheduler.py            # scheduled polling, locking, deduplication
 │   └── entrypoint.py           # CLI orchestration
 ├── artifacts/v1/               # weights, mean, std, SHA-256 manifest
-├── reference/                  # supplied reference scripts; text translated
+├── reference/                  # optional local reference scripts; ignored by Git
 ├── tests/                      # temporal, spatial, and integration checks
 ├── deploy/                     # systemd timer, generator, installation guide
 ├── data/raw/                   # optional local inputs; never deleted by pipeline
@@ -54,9 +54,10 @@ The 0.1° resolution is part of the GSMaP binary contract, not a resampling
 option. Older JSON configurations must remove `resolution`. The effective
 resolution is recorded in each run manifest. Architecture values in the
 artifact manifest are descriptive; reconstruction reads the checkpoint.
-Scripts under `reference/` are retained for auditing and are not imported
-by the operational pipeline. Their comments and display text were translated
-to English; model calculations were not changed.
+Local scripts under `reference/` can be retained for auditing; Git ignores
+this directory, and it is not required to install or run the operational
+pipeline. Their comments and display text were translated to English;
+model calculations were not changed.
 
 Use Python 3.11 or newer. From this directory:
 
@@ -207,8 +208,8 @@ their manifest. SHA-256 detects changes but does not establish provenance.
 The 93 MB checkpoint belongs in a release, object storage, or Git LFS; it is
 ignored by ordinary Git. The `.npy` files and manifest may be versioned.
 Before public distribution, establish the license, weight provenance, and
-applicable data redistribution terms. The reference assets are for auditing,
-not maintained entrypoints.
+applicable data redistribution terms. Local reference assets are for auditing,
+are excluded from this repository, and are not maintained entrypoints.
 
 One GeoTIFF per issue and lead simplifies GIS use without merging forecasts
 with the same valid time but different issues. Large remote services could
