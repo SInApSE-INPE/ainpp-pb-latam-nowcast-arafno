@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "v1",
-  "download_base_url": "https://ftp.cptec.inpe.br/rainfall/ainpp-pb-latam/checkpoints/arafno/v1/",
+  "download_base_url": "https://ainpp-pb-latam-nowcasting-checkpoints.s3.us-east-2.amazonaws.com/",
   "architecture": {
     "input_steps": 6,
     "height": 880,
